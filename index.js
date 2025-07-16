@@ -1662,23 +1662,24 @@ const configPage = `
           </div>
           
           <div id="telegramConfig" class="config-section">
-            <h4 class="text-md font-medium text-gray-900 mb-3">Telegram 配置</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label for="tgBotToken" class="block text-sm font-medium text-gray-700">Bot Token</label>
-                <input type="text" id="tgBotToken" placeholder="从 @BotFather 获取" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-              </div>
-              <div>
-                <label for="tgChatId" class="block text-sm font-medium text-gray-700">Chat ID</label>
-                <input type="text" id="tgChatId" placeholder="可从 @userinfobot 获取" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-              </div>
-            </div>
-            <div class="flex justify-end">
-              <button type="button" id="testTelegramBtn" class="btn-secondary text-white px-4 py-2 rounded-md text-sm font-medium">
-                <i class="fas fa-paper-plane mr-2"></i>测试 Telegram 通知
-              </button>
-            </div>
-          </div>
+      <h4 class="text-md font-medium text-gray-900 mb-3">Telegram 配置</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label for="tgBotToken" class="block text-sm font-medium text-gray-700">Bot Token</label>
+          <input type="text" id="tgBotToken" placeholder="从 @BotFather 获取" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+        <div>
+          <label for="tgChatId" class="block text-sm font-medium text-gray-700">Chat ID（多个用逗号分隔）</label>
+          <input type="text" id="tgChatId" placeholder="可从 @userinfobot 获取，多个用逗号分隔" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+          <p class="mt-1 text-sm text-gray-500">多个Chat ID请用英文逗号分隔</p>
+        </div>
+      </div>
+      <div class="flex justify-end">
+        <button type="button" id="testTelegramBtn" class="btn-secondary text-white px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fas fa-paper-plane mr-2"></i>测试 Telegram 通知
+        </button>
+      </div>
+    </div>
           
           <div id="notifyxConfig" class="config-section">
             <h4 class="text-md font-medium text-gray-900 mb-3">NotifyX 配置</h4>
@@ -2988,53 +2989,45 @@ async function sendTelegramNotification(message, config) {
       return false;
     }
 
-    console.log('[Telegram] 开始发送通知到 Chat ID: ' + config.TG_CHAT_ID);
+    // 分割多个 Chat ID
+    const chatIds = config.TG_CHAT_ID.split(',').map(id => id.trim());
+    console.log('[Telegram] 开始发送通知到多个 Chat ID:', chatIds);
 
-    const url = 'https://api.telegram.org/bot' + config.TG_BOT_TOKEN + '/sendMessage';
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: config.TG_CHAT_ID,
-        text: message,
-        parse_mode: 'Markdown'
-      })
-    });
+    let allSuccess = true;
+    
+    for (const chatId of chatIds) {
+      if (!chatId) continue;
+      
+      console.log('[Telegram] 正在发送到 Chat ID: ' + chatId);
+      
+      const url = 'https://api.telegram.org/bot' + config.TG_BOT_TOKEN + '/sendMessage';
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+            parse_mode: 'Markdown'
+          })
+        });
 
-    const result = await response.json();
-    console.log('[Telegram] 发送结果:', result);
-    return result.ok;
-  } catch (error) {
-    console.error('[Telegram] 发送通知失败:', error);
-    return false;
-  }
-}
-
-async function sendNotifyXNotification(title, content, description, config) {
-  try {
-    if (!config.NOTIFYX_API_KEY) {
-      console.error('[NotifyX] 通知未配置，缺少API Key');
-      return false;
+        const result = await response.json();
+        console.log('[Telegram] 发送到 ' + chatId + ' 的结果:', result);
+        
+        if (!result.ok) {
+          allSuccess = false;
+          console.error('[Telegram] 发送到 ' + chatId + ' 失败:', result.description);
+        }
+      } catch (error) {
+        console.error('[Telegram] 发送到 ' + chatId + ' 时出错:', error);
+        allSuccess = false;
+      }
     }
 
-    console.log('[NotifyX] 开始发送通知: ' + title);
-
-    const url = 'https://www.notifyx.cn/api/v1/send/' + config.NOTIFYX_API_KEY;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title,
-        content: content,
-        description: description || ''
-      })
-    });
-
-    const result = await response.json();
-    console.log('[NotifyX] 发送结果:', result);
-    return result.status === 'queued';
+    return allSuccess;
   } catch (error) {
-    console.error('[NotifyX] 发送通知失败:', error);
+    console.error('[Telegram] 发送通知失败:', error);
     return false;
   }
 }
